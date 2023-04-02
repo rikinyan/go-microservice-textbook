@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	api "github.com/rikinyan/proglog/StructureDataWithProtobuf/api/v1"
+	api "github.com/rikinyan/proglog/api/v1"
 )
 
 type Log struct {

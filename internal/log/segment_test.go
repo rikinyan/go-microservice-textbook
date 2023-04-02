@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	api "github.com/rikinyan/proglog/StructureDataWithProtobuf/api/v1"
+	api "github.com/rikinyan/proglog/api/v1"
 	"google.golang.org/protobuf/proto"
 )
 
