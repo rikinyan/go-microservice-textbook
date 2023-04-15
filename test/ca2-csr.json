@@ -1,0 +1,13 @@
+{
+    "CN": "second ca for error check",
+    "names": [
+        {
+            "C":  "US",
+            "L":  "San Francisco",
+            "O":  "Internet Widgets, Inc.",
+            "OU": "WWW",
+            "ST": "California"
+        }
+    ]
+}
+
