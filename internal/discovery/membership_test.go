@@ -7,7 +7,7 @@ import (
 
 	"github.com/hashicorp/serf/serf"
 	"github.com/stretchr/testify/require"
-	"github.com/rikinyan/go-dynaport"
+	dynaport "github.com/travisjeffery/go-dynaport"
 	. "github.com/rikinyan/proglog/internal/discovery"
 )
 
@@ -28,7 +28,7 @@ func TestMembership(t *testing.T) {
 		return len(handler.joins) == 2 &&
 		len(m[0].Members()) == 3 &&
 		m[0].Members()[2].Status == serf.StatusLeft &&
-		len(handler.leaves) == 0
+		len(handler.leaves) == 1
 	}, 3 * time.Second, 250 * time.Millisecond)
 
 	require.Equal(t, "2", <-handler.leaves)
@@ -71,7 +71,7 @@ type handler struct {
 
 func (h *handler) Join(id, addr string) error {
 	if h.joins != nil {
-		h.joins <- map[string]string{
+		h.joins <- map[string]string {
 			"id": id,
 			"addr": addr,
 		}
