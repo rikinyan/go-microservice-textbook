@@ -13,11 +13,11 @@ import (
 )
 
 type Log struct {
-	mu sync.RWMutex
-	Dir string
-	Config Config
+	mu            sync.RWMutex
+	Dir           string
+	Config        Config
 	activeSegment *segment
-	segments []*segment
+	segments      []*segment
 }
 
 func NewLog(dir string, c Config) (*Log, error) {
@@ -29,8 +29,8 @@ func NewLog(dir string, c Config) (*Log, error) {
 		c.Segment.MaxIndexBytes = 1024
 	}
 
-	l := &Log {
-		Dir: dir,
+	l := &Log{
+		Dir:    dir,
 		Config: c,
 	}
 
@@ -163,7 +163,7 @@ func (l *Log) HighestOffset() (uint64, error) {
 }
 
 func (l *Log) highestOffset() (uint64, error) {
-	off := l.segments[len(l.segments) - 1].nextOffset
+	off := l.segments[len(l.segments)-1].nextOffset
 	if off == 0 {
 		return 0, nil
 	}
@@ -175,9 +175,9 @@ func (l *Log) Truncate(lowest uint64) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	var segments []*segment 
+	var segments []*segment
 	for _, s := range l.segments {
-		if s.nextOffset <= lowest + 1 {
+		if s.nextOffset <= lowest+1 {
 			if err := s.Remove(); err != nil {
 				return nil
 			}
@@ -194,7 +194,7 @@ func (l *Log) Truncate(lowest uint64) error {
 func (l *Log) Reader() io.Reader {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	
+
 	readers := make([]io.Reader, len(l.segments))
 	for i, segment := range l.segments {
 		readers[i] = &originReader{segment.store, 0}
@@ -223,4 +223,3 @@ func (l *Log) newSegment(off uint64) error {
 	l.activeSegment = s
 	return nil
 }
-

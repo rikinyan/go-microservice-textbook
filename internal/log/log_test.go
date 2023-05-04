@@ -1,23 +1,24 @@
 package log
+
 import (
 	"io"
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	api "github.com/rikinyan/proglog/api/v1"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
 func TestLog(t *testing.T) {
 	for scenario, fn := range map[string]func(
 		t *testing.T, log *Log,
-	) {
+	){
 		"append and read a record succeeds": testAppendRead,
-		"offset out of range error": testOutOfRangeErr,
-		"init with existing segments": testInitExisting,
-		"reader": testReader,
-		"truncate": testTruncate,
+		"offset out of range error":         testOutOfRangeErr,
+		"init with existing segments":       testInitExisting,
+		"reader":                            testReader,
+		"truncate":                          testTruncate,
 	} {
 		t.Run(scenario, func(t *testing.T) {
 			dir, err := os.MkdirTemp("", "store-test")
@@ -35,7 +36,7 @@ func TestLog(t *testing.T) {
 }
 
 func testAppendRead(t *testing.T, log *Log) {
-	append := &api.Record {
+	append := &api.Record{
 		Value: []byte("hello world"),
 	}
 
@@ -60,7 +61,7 @@ func testInitExisting(t *testing.T, o *Log) {
 		Value: []byte("hello world"),
 	}
 	for i := 0; i < 3; i++ {
-		_ , err := o.Append(append)
+		_, err := o.Append(append)
 		require.NoError(t, err)
 	}
 	require.NoError(t, o.Close())
@@ -109,7 +110,7 @@ func testTruncate(t *testing.T, log *Log) {
 		Value: []byte("hello world"),
 	}
 	for i := 0; i < 3; i++ {
-		_ , err := log.Append(append)
+		_, err := log.Append(append)
 		require.NoError(t, err)
 	}
 
@@ -119,4 +120,3 @@ func testTruncate(t *testing.T, log *Log) {
 	require.Error(t, err)
 	require.NoError(t, log.Close())
 }
-

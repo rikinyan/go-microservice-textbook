@@ -1,11 +1,10 @@
 package log
 
 import (
+	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
-	"github.com/stretchr/testify/require"
 )
-
 
 var (
 	write = []byte("hello world")
@@ -22,7 +21,7 @@ func TestStoreAppendRead(t *testing.T) {
 	testAppend(t, s)
 	testRead(t, s)
 	testReadAt(t, s)
-	
+
 	s, err = newStore(f)
 	require.NoError(t, err)
 	testRead(t, s)
@@ -33,7 +32,7 @@ func testAppend(t *testing.T, s *store) {
 	for i := uint64(1); i < 4; i++ {
 		n, pos, err := s.Append(write)
 		require.NoError(t, err)
-		require.Equal(t, pos + n, width * i)
+		require.Equal(t, pos+n, width*i)
 	}
 }
 
@@ -92,7 +91,7 @@ func TestStoreClose(t *testing.T) {
 func openFile(name string) (file *os.File, size int64, err error) {
 	f, err := os.OpenFile(
 		name,
-		os.O_RDWR | os.O_CREATE | os.O_APPEND,
+		os.O_RDWR|os.O_CREATE|os.O_APPEND,
 		0600,
 	)
 

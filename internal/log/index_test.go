@@ -25,7 +25,7 @@ func TestIndex(t *testing.T) {
 	entries := []struct {
 		Off uint32
 		Pos uint64
-	} {
+	}{
 		{Off: 0, Pos: 0},
 		{Off: 1, Pos: 10},
 	}
@@ -54,5 +54,3 @@ func TestIndex(t *testing.T) {
 	require.Equal(t, uint32(1), off)
 	require.Equal(t, entries[1].Pos, pos)
 }
-
-	

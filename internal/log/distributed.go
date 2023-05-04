@@ -2,7 +2,10 @@ package log
 
 import (
 	"bytes"
+	"crypto/tls"
+	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
@@ -15,10 +18,10 @@ import (
 )
 
 type DistributedLog struct {
-	config Config
-	log *Log
+	config  Config
+	log     *Log
 	raftLog *logStore
-	raft *raft.Raft
+	raft    *raft.Raft
 }
 
 func NewDistributedLog(dataDir string, config Config) (
@@ -52,9 +55,9 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 	var err error
 
 	fsm := &fsm{log: l.log}
-	
+
 	logDir := filepath.Join(dataDir, "raft", "log")
-	if err != nil {
+	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return err
 	}
 
@@ -85,14 +88,14 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 	maxPool := 5
 	timeout := 10 * time.Second
 	transport := raft.NewNetworkTransport(
-		l.config.Raft.StreamLayer,
+		l.config.Raft.Streamlayer,
 		maxPool,
 		timeout,
 		os.Stderr,
 	)
 
 	config := raft.DefaultConfig()
-	config.LocalID = l.config.Raft.LocalId
+	config.LocalID = l.config.Raft.LocalID
 	if l.config.Raft.HeartbeatTimeout != 0 {
 		config.HeartbeatTimeout = l.config.Raft.HeartbeatTimeout
 	}
@@ -105,7 +108,7 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 	if l.config.Raft.CommitTimeout != 0 {
 		config.CommitTimeout = l.config.Raft.CommitTimeout
 	}
-	
+
 	l.raft, err = raft.NewRaft(
 		config,
 		fsm,
@@ -127,9 +130,9 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 		return err
 	}
 	if l.config.Raft.Bootstrap && !hasState {
-		config := raft.Configuration {
+		config := raft.Configuration{
 			Servers: []raft.Server{{
-				ID: config.LocalID,
+				ID:      config.LocalID,
 				Address: transport.LocalAddr(),
 			}},
 		}
@@ -191,11 +194,12 @@ type fsm struct {
 }
 
 type RequestType uint8
+
 const (
 	AppendRequestType RequestType = 0
 )
 
-func (l *fsm) Apply(record *raft.Log) interface {} {
+func (l *fsm) Apply(record *raft.Log) interface{} {
 	buf := record.Data
 	reqType := RequestType(buf[0])
 	switch reqType {
@@ -232,7 +236,7 @@ type snapshot struct {
 func (s *snapshot) Persist(sink raft.SnapshotSink) error {
 	if _, err := io.Copy(sink, s.reader); err != nil {
 		_ = sink.Cancel()
-		return err 
+		return err
 	}
 	return sink.Close()
 }
@@ -278,7 +282,6 @@ type logStore struct {
 	*Log
 }
 
-
 func newLogStore(dir string, c Config) (*logStore, error) {
 	log, err := NewLog(dir, c)
 	if err != nil {
@@ -312,19 +315,139 @@ func (l *logStore) StoreLog(record *raft.Log) error {
 	return l.StoreLogs([]*raft.Log{record})
 }
 
-func (l *logStore) StoreLogs (records []*raft.Log) error {
+func (l *logStore) StoreLogs(records []*raft.Log) error {
 	for _, record := range records {
 		if _, err := l.Append(&api.Record{
 			Value: record.Data,
-			Term: record.Term,
-			Type: uint32(record.Type),
+			Term:  record.Term,
+			Type:  uint32(record.Type),
 		}); err != nil {
 			return err
 		}
 	}
-	return nil 
+	return nil
 }
 
 func (l *logStore) DeleteRange(min, max uint64) error {
 	return l.Truncate(max)
+}
+
+var _ raft.StreamLayer = (*StreamLayer)(nil)
+
+type StreamLayer struct {
+	ln              net.Listener
+	serverTLSConfig *tls.Config
+	peerTLSConfig   *tls.Config
+}
+
+func NewStreamLayer(
+	ln net.Listener,
+	serverTLSConfig, peerTLSConfig *tls.Config,
+) *StreamLayer {
+	return &StreamLayer{
+		ln:              ln,
+		serverTLSConfig: serverTLSConfig,
+		peerTLSConfig:   peerTLSConfig,
+	}
+}
+
+const RaftRPC = 1
+
+func (s *StreamLayer) Dial(
+	addr raft.ServerAddress,
+	timeout time.Duration,
+) (net.Conn, error) {
+	dialer := &net.Dialer{Timeout: timeout}
+	var conn, err = dialer.Dial("tcp", string(addr))
+	if err != nil {
+		return nil, err
+	}
+	if s.peerTLSConfig != nil {
+		conn = tls.Client(conn, s.peerTLSConfig)
+	}
+	return conn, nil
+}
+
+func (s *StreamLayer) Accept() (net.Conn, error) {
+	conn, err := s.ln.Accept()
+	if err != nil {
+		return nil, err
+	}
+	b := make([]byte, 1)
+	_, err = conn.Read(b)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal([]byte{byte(RaftRPC)}, b) {
+		return nil, fmt.Errorf("not a raft rpc")
+	}
+	if s.serverTLSConfig != nil {
+		return tls.Server(conn, s.serverTLSConfig), nil
+	}
+	return conn, nil
+}
+
+func (s *StreamLayer) Close() error {
+	return s.ln.Close()
+}
+
+func (s *StreamLayer) Addr() net.Addr {
+	return s.ln.Addr()
+}
+
+func (l *DistributedLog) Join(id, addr string) error {
+	configFuture := l.raft.GetConfiguration()
+	if err := configFuture.Error(); err != nil {
+		return err
+	}
+	serverID := raft.ServerID(id)
+	serverAddr := raft.ServerAddress(addr)
+	for _, srv := range configFuture.Configuration().Servers {
+		if srv.ID == serverID || srv.Address == serverAddr {
+			if srv.ID == serverID && srv.Address == serverAddr {
+				return nil
+			}
+			removeFuture := l.raft.RemoveServer(serverID, 0, 0)
+			if err := removeFuture.Error(); err != nil {
+				return err
+			}
+		}
+	}
+	addFuture := l.raft.AddVoter(serverID, serverAddr, 0, 0)
+	if err := addFuture.Error(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (l *DistributedLog) Leave(id string) error {
+	removeFuture := l.raft.RemoveServer(raft.ServerID(id), 0, 0)
+	return removeFuture.Error()
+}
+
+func (l *DistributedLog) WaitForLeader(timeout time.Duration) error {
+	timeoutc := time.After(timeout)
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-timeoutc:
+			return fmt.Errorf("timed out")
+		case <-ticker.C:
+			if l := l.raft.Leader(); l != "" {
+				return nil
+			}
+		}
+	}
+}
+
+func (l *DistributedLog) Close() error {
+	f := l.raft.Shutdown()
+	if err := f.Error(); err != nil {
+		return err
+	}
+	if err := l.raftLog.Log.Close(); err != nil {
+		return err
+	}
+	return l.log.Close()
 }

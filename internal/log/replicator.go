@@ -1,4 +1,5 @@
 package log
+
 import (
 	"context"
 	"sync"
@@ -15,10 +16,10 @@ type Replicator struct {
 
 	logger *zap.Logger
 
-	mu sync.Mutex
+	mu      sync.Mutex
 	servers map[string]chan struct{}
-	closed bool
-	close chan struct{}
+	closed  bool
+	close   chan struct{}
 }
 
 func (r *Replicator) Join(name, addr string) error {
@@ -66,7 +67,7 @@ func (r *Replicator) replicate(addr string, leave chan struct{}) {
 			recv, err := stream.Recv()
 			if err != nil {
 				r.logError(err, "failed to receive", addr)
-				return 
+				return
 			}
 			records <- recv.Record
 		}
@@ -139,4 +140,3 @@ func (r *Replicator) logError(err error, msg, addr string) {
 		zap.Error(err),
 	)
 }
-
