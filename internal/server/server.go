@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	api "github.com/rikinyan/proglog/api/v1"
@@ -18,8 +19,8 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
@@ -27,6 +28,7 @@ import (
 type Config struct {
 	CommitLog CommitLog
 	Authorizer Authorizer
+	GetServerer GetServerer
 }
 
 type Authorizer interface {
@@ -175,6 +177,21 @@ func (s *grpcServer) ConsumeStream(
 				req.Offset++
 		}
 	}
+}
+
+func (s *grpcServer) GetServers(
+	ctx context.Context, req *api.GetServersRequest,
+) (*api.GetServersResponse, error) {
+	servers, err := s.GetServerer.GetServers()
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(servers)
+	return &api.GetServersResponse{Servers: servers}, nil
+}
+
+type GetServerer interface {
+	GetServers() ([]*api.Server, error)
 }
 
 func authenticate(ctx context.Context) (context.Context, error) {

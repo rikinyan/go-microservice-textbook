@@ -23,27 +23,27 @@ import (
 type Agent struct {
 	Config
 
-	mux cmux.CMux
-	log *log.DistributedLog
-	server *grpc.Server
+	mux        cmux.CMux
+	log        *log.DistributedLog
+	server     *grpc.Server
 	membership *discovery.Membership
 
-	shutdown bool
-	shutdowns chan struct{}
+	shutdown     bool
+	shutdowns    chan struct{}
 	shutdownLock sync.Mutex
 }
 
 type Config struct {
 	ServerTLSConfig *tls.Config
-	PeerTLSConfig *tls.Config
-	DataDir string
-	BindAddr string
-	RPCPort int
-	NodeName string
-	StartjoinAddrs []string
-	ACLModelFile string
-	ACLPolicyFile string
-	Bootstrap bool
+	PeerTLSConfig   *tls.Config
+	DataDir         string
+	BindAddr        string
+	RPCPort         int
+	NodeName        string
+	StartjoinAddrs  []string
+	ACLModelFile    string
+	ACLPolicyFile   string
+	Bootstrap       bool
 }
 
 func (c Config) RPCAddr() (string, error) {
@@ -56,7 +56,7 @@ func (c Config) RPCAddr() (string, error) {
 
 func New(config Config) (*Agent, error) {
 	a := &Agent{
-		Config: config,
+		Config:    config,
 		shutdowns: make(chan struct{}),
 	}
 	setup := []func() error{
@@ -89,7 +89,6 @@ func (a *Agent) setupMux() error {
 	return nil
 }
 
-
 func (a *Agent) setupLogger() error {
 	logger, err := zap.NewDevelopment()
 	if err != nil {
@@ -108,7 +107,7 @@ func (a *Agent) setupLog() error {
 		return bytes.Equal(b, []byte{byte(log.RaftRPC)})
 	})
 	logConfig := log.Config{}
-	logConfig.Raft.Streamlayer= log.NewStreamLayer(
+	logConfig.Raft.StreamLayer = log.NewStreamLayer(
 		raftLn,
 		a.Config.ServerTLSConfig,
 		a.Config.PeerTLSConfig,
@@ -135,8 +134,9 @@ func (a *Agent) setupServer() error {
 		a.Config.ACLPolicyFile,
 	)
 	serverConfig := &server.Config{
-		CommitLog: a.log,
+		CommitLog:  a.log,
 		Authorizer: authorizer,
+		GetServerer: a.log,
 	}
 	var opts []grpc.ServerOption
 	if a.Config.ServerTLSConfig != nil {
@@ -173,19 +173,19 @@ func (a *Agent) setupMembership() error {
 	return err
 }
 
-func (a *Agent)Shutdown() error {
+func (a *Agent) Shutdown() error {
 	a.shutdownLock.Lock()
 	defer a.shutdownLock.Unlock()
-	
+
 	if a.shutdown {
 		return nil
 	}
 	a.shutdown = true
 	close(a.shutdowns)
 
-	shutdown := []func() error {
+	shutdown := []func() error{
 		a.membership.Leave,
-		func () error {
+		func() error {
 			a.server.GracefulStop()
 			return nil
 		},

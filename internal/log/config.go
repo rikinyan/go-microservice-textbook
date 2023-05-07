@@ -7,7 +7,7 @@ import (
 type Config struct {
 	Raft struct {
 		raft.Config
-		Streamlayer *StreamLayer
+		StreamLayer *StreamLayer
 		Bootstrap   bool
 	}
 	Segment struct {

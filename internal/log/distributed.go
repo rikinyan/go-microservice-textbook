@@ -88,7 +88,7 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 	maxPool := 5
 	timeout := 10 * time.Second
 	transport := raft.NewNetworkTransport(
-		l.config.Raft.Streamlayer,
+		l.config.Raft.StreamLayer,
 		maxPool,
 		timeout,
 		os.Stderr,
@@ -450,4 +450,24 @@ func (l *DistributedLog) Close() error {
 		return err
 	}
 	return l.log.Close()
+}
+
+func (l *DistributedLog) GetServers() ([]*api.Server, error) {
+	future := l.raft.GetConfiguration()
+	if err := future.Error(); err != nil {
+		return nil, err
+	}
+	var servers []*api.Server
+	for _, server := range future.Configuration().Servers {
+		// 元の構造体が外部で変更されないように、ここでResponse用のデータに変換
+		servers = append(
+			servers,
+			&api.Server{
+				Id:       string(server.ID),
+				RpcAddr:  string(server.Address),
+				IsLeader: l.raft.Leader() == server.Address,
+			},
+		)
+	}
+	return servers, nil
 }
