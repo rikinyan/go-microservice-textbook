@@ -1,3 +1,4 @@
+// START: setup_test
 package loadbalance_test
 
 import (
@@ -6,16 +7,17 @@ import (
 	"net/url"
 	"testing"
 
-	api "github.com/rikinyan/proglog/api/v1"
-	"github.com/rikinyan/proglog/internal/config"
-	"github.com/rikinyan/proglog/internal/loadbalance"
-	"github.com/rikinyan/proglog/internal/server"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/attributes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/serviceconfig"
+
+	api "github.com/rikinyan/proglog/api/v1"
+	"github.com/rikinyan/proglog/internal/config"
+	"github.com/rikinyan/proglog/internal/loadbalance"
+	"github.com/rikinyan/proglog/internal/server"
 )
 
 func TestResolver(t *testing.T) {
@@ -33,12 +35,14 @@ func TestResolver(t *testing.T) {
 	serverCreds := credentials.NewTLS(tlsConfig)
 
 	srv, err := server.NewGRPCServer(&server.Config{
-		GetServerer: &getServers{},
+		GetServerer: &getServers{}, //<label id="get_servers_mock"/>
 	}, grpc.Creds(serverCreds))
 	require.NoError(t, err)
 
 	go srv.Serve(l)
+	// END: setup_test
 
+	// START: mid_test
 	conn := &clientConn{}
 	tlsConfig, err = config.SetupTLSConfig(config.TLSConfig{
 		CertFile:      config.RootClientCertFile,
@@ -53,20 +57,21 @@ func TestResolver(t *testing.T) {
 		DialCreds: clientCreds,
 	}
 	r := &loadbalance.Resolver{}
-	targetURL, err := url.Parse(
-		fmt.Sprintf("proglog:%s", l.Addr().String()),
+	url, err := url.Parse(
+		fmt.Sprintf("%s:%s", "proglog", l.Addr().String()),
 	)
 	require.NoError(t, err)
-	fmt.Println(targetURL.String())
 	_, err = r.Build(
 		resolver.Target{
-			URL: *targetURL,
+			URL: *url,
 		},
 		conn,
 		opts,
 	)
 	require.NoError(t, err)
+	// END: mid_test
 
+	// START: finish_test
 	wantState := resolver.State{
 		Addresses: []resolver.Address{{
 			Addr:       "localhost:9001",
@@ -106,12 +111,16 @@ func (c *clientConn) UpdateState(state resolver.State) error {
 	return nil
 }
 
-func (c *clientConn) ReportError(err error)               {}
+func (c *clientConn) ReportError(err error) {}
+
 func (c *clientConn) NewAddress(addrs []resolver.Address) {}
-func (c *clientConn) NewServiceConfig(config string)      {}
+
+func (c *clientConn) NewServiceConfig(config string) {}
 
 func (c *clientConn) ParseServiceConfig(
 	config string,
 ) *serviceconfig.ParseResult {
 	return nil
 }
+
+// END: mock_deps

@@ -42,7 +42,6 @@ func (r *Resolver) Build(
 	)
 	var err error
 	r.resolverConn, err = grpc.Dial(target.Endpoint(), dialOpts...)
-	fmt.Println(fmt.Sprintf("%#v", r.resolverConn))
 	if err != nil {
 		return nil, err
 	}
