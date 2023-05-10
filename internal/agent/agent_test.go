@@ -11,11 +11,12 @@ import (
 	api "github.com/rikinyan/proglog/api/v1"
 	"github.com/rikinyan/proglog/internal/agent"
 	"github.com/rikinyan/proglog/internal/config"
+	"github.com/rikinyan/proglog/internal/loadbalance"
 	"github.com/stretchr/testify/require"
 	dynaport "github.com/travisjeffery/go-dynaport"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 )
 
 func TestAgent(t *testing.T) {
@@ -93,6 +94,9 @@ func TestAgent(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	// レプリケーションが完了するまで待つ
+	time.Sleep(3 * time.Second)
+
 	consumeResponse, err := leaderClient.Consume(
 		context.Background(),
 		&api.ConsumeRequest{
@@ -101,9 +105,6 @@ func TestAgent(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, consumeResponse.Record.Value, []byte("foo"))
-
-	// replicationが完了するまで待つ
-	time.Sleep(time.Second * 3)
 
 	followerClient := client(t, agents[1], peerTLSConfig)
 	consumeResponse, err = followerClient.Consume(
@@ -140,7 +141,11 @@ func client(
 	rpcAddr, err := agent.Config.RPCAddr()
 	require.NoError(t, err)
 
-	conn, err :=grpc.Dial(rpcAddr, opts...)
+	conn, err :=grpc.Dial(fmt.Sprintf(
+		"%s:///%s",
+		loadbalance.Name,
+		rpcAddr,
+	), opts...)
 	require.NoError(t, err)
 
 	client := api.NewLogClient(conn)

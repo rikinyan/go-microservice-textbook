@@ -96,6 +96,7 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 
 	config := raft.DefaultConfig()
 	config.LocalID = l.config.Raft.LocalID
+	fmt.Println(config.LocalID)
 	if l.config.Raft.HeartbeatTimeout != 0 {
 		config.HeartbeatTimeout = l.config.Raft.HeartbeatTimeout
 	}
@@ -129,6 +130,7 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 	if err != nil {
 		return err
 	}
+
 	if l.config.Raft.Bootstrap && !hasState {
 		config := raft.Configuration{
 			Servers: []raft.Server{{
@@ -357,8 +359,13 @@ func (s *StreamLayer) Dial(
 	addr raft.ServerAddress,
 	timeout time.Duration,
 ) (net.Conn, error) {
+	fmt.Println("in dial")
 	dialer := &net.Dialer{Timeout: timeout}
 	var conn, err = dialer.Dial("tcp", string(addr))
+	if err != nil {
+		return nil, err
+	}
+	_, err = conn.Write([]byte{byte(RaftRPC)})
 	if err != nil {
 		return nil, err
 	}
@@ -384,6 +391,7 @@ func (s *StreamLayer) Accept() (net.Conn, error) {
 	if s.serverTLSConfig != nil {
 		return tls.Server(conn, s.serverTLSConfig), nil
 	}
+
 	return conn, nil
 }
 

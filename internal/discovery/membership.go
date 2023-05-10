@@ -11,16 +11,16 @@ import (
 type Membership struct {
 	Config
 	handler Handler
-	serf *serf.Serf
-	events chan serf.Event
-	logger *zap.Logger
+	serf    *serf.Serf
+	events  chan serf.Event
+	logger  *zap.Logger
 }
 
 func New(handler Handler, config Config) (*Membership, error) {
 	c := &Membership{
-		Config: config,
+		Config:  config,
 		handler: handler,
-		logger: zap.L().Named("membership"),
+		logger:  zap.L().Named("membership"),
 	}
 
 	if err := c.setupSerf(); err != nil {
@@ -30,9 +30,9 @@ func New(handler Handler, config Config) (*Membership, error) {
 }
 
 type Config struct {
-	NodeName string
-	BindAddr string
-	Tags map[string]string
+	NodeName       string
+	BindAddr       string
+	Tags           map[string]string
 	StartJoinAddrs []string
 }
 
