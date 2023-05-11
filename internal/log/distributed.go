@@ -139,6 +139,7 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 			}},
 		}
 		err = l.raft.BootstrapCluster(config).Error()
+		fmt.Println("create cluster")
 	}
 	return err
 }
