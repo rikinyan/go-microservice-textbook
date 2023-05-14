@@ -168,7 +168,7 @@ func (a *Agent) setupMembership() error {
 		Tags: map[string]string{
 			"rpc_addr": rpcAddr,
 		},
-		StartJoinAddrs: a.Config.StartJoinAddrs,
+		StartJoinAddrs: a.Config.StartjoinAddrs,
 	})
 	return err
 }
