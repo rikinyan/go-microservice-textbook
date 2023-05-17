@@ -23,11 +23,14 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type Config struct {
-	CommitLog CommitLog
-	Authorizer Authorizer
+	CommitLog   CommitLog
+	Authorizer  Authorizer
 	GetServerer GetServerer
 }
 
@@ -37,8 +40,8 @@ type Authorizer interface {
 
 const (
 	objectWildcard = "*"
-	produceAction = "produce"
-	consumeAction = "consume"
+	produceAction  = "produce"
+	consumeAction  = "consume"
 )
 
 var _ api.LogServer = (*grpcServer)(nil)
@@ -70,14 +73,19 @@ func NewGRPCServer(config *Config, grpcOpts ...grpc.ServerOption) (*grpc.Server,
 			grpc_zap.StreamServerInterceptor(logger, zapOpts...),
 			grpc_auth.StreamServerInterceptor(authenticate),
 		)), grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
-			grpc_ctxtags.UnaryServerInterceptor(),
-			grpc_zap.UnaryServerInterceptor(logger, zapOpts...),
-			grpc_auth.UnaryServerInterceptor(authenticate),
-		)),
+		grpc_ctxtags.UnaryServerInterceptor(),
+		grpc_zap.UnaryServerInterceptor(logger, zapOpts...),
+		grpc_auth.UnaryServerInterceptor(authenticate),
+	)),
 		grpc.StatsHandler(&ocgrpc.ServerHandler{}),
 	)
 
 	gsrv := grpc.NewServer(grpcOpts...)
+
+	hsrv := health.NewServer()
+	hsrv.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+	healthpb.RegisterHealthServer(gsrv, hsrv)
+
 	srv, err := newgrpcServer(config)
 	if err != nil {
 		return nil, err
@@ -98,7 +106,7 @@ type CommitLog interface {
 }
 
 func newgrpcServer(config *Config) (*grpcServer, error) {
-	srv := &grpcServer {
+	srv := &grpcServer{
 		Config: config,
 	}
 
@@ -159,22 +167,22 @@ func (s *grpcServer) ConsumeStream(
 ) error {
 	for {
 		select {
-			case <-stream.Context().Done():
-				return nil
+		case <-stream.Context().Done():
+			return nil
+		default:
+			res, err := s.Consume(stream.Context(), req)
+			switch err.(type) {
+			case nil:
+			case api.ErrOffsetOutOfRange:
+				continue
 			default:
-				res, err := s.Consume(stream.Context(), req)
-				switch err.(type) {
-				case nil:
-				case api.ErrOffsetOutOfRange:
-					continue
-				default:
-					return err
-				}
-				
-				if err = stream.Send(res); err != nil {
-					return err
-				}
-				req.Offset++
+				return err
+			}
+
+			if err = stream.Send(res); err != nil {
+				return err
+			}
+			req.Offset++
 		}
 	}
 }
@@ -219,4 +227,3 @@ func subject(ctx context.Context) string {
 }
 
 type subjectContextKey struct{}
-
