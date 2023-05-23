@@ -10,18 +10,19 @@ import (
 	"time"
 
 	"github.com/hashicorp/raft"
-	"github.com/rikinyan/proglog/internal/auth"
-	"github.com/rikinyan/proglog/internal/discovery"
-	"github.com/rikinyan/proglog/internal/log"
-	"github.com/rikinyan/proglog/internal/server"
 	"github.com/soheilhy/cmux"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+
+	"github.com/rikinyan/proglog/internal/auth"
+	"github.com/rikinyan/proglog/internal/discovery"
+	"github.com/rikinyan/proglog/internal/log"
+	"github.com/rikinyan/proglog/internal/server"
 )
 
 type Agent struct {
-	Config
+	Config Config
 
 	mux        cmux.CMux
 	log        *log.DistributedLog
@@ -29,7 +30,6 @@ type Agent struct {
 	membership *discovery.Membership
 
 	shutdown     bool
-	shutdowns    chan struct{}
 	shutdownLock sync.Mutex
 }
 
@@ -56,8 +56,7 @@ func (c Config) RPCAddr() (string, error) {
 
 func New(config Config) (*Agent, error) {
 	a := &Agent{
-		Config:    config,
-		shutdowns: make(chan struct{}),
+		Config: config,
 	}
 	setup := []func() error{
 		a.setupLogger,
@@ -66,7 +65,6 @@ func New(config Config) (*Agent, error) {
 		a.setupServer,
 		a.setupMembership,
 	}
-
 	for _, fn := range setup {
 		if err := fn(); err != nil {
 			return nil, err
@@ -86,7 +84,6 @@ func (a *Agent) setupMux() error {
 		addr.IP.String(),
 		a.Config.RPCPort,
 	)
-
 	ln, err := net.Listen("tcp", rpcAddr)
 	if err != nil {
 		return err
@@ -112,6 +109,7 @@ func (a *Agent) setupLog() error {
 		}
 		return bytes.Equal(b, []byte{byte(log.RaftRPC)})
 	})
+
 	logConfig := log.Config{}
 	logConfig.Raft.StreamLayer = log.NewStreamLayer(
 		raftLn,
@@ -125,6 +123,7 @@ func (a *Agent) setupLog() error {
 	logConfig.Raft.BindAddr = rpcAddr
 	logConfig.Raft.LocalID = raft.ServerID(a.Config.NodeName)
 	logConfig.Raft.Bootstrap = a.Config.Bootstrap
+	logConfig.Raft.CommitTimeout = 1000 * time.Millisecond
 	a.log, err = log.NewDistributedLog(
 		a.Config.DataDir,
 		logConfig,
@@ -164,7 +163,7 @@ func (a *Agent) setupServer() error {
 			_ = a.Shutdown()
 		}
 	}()
-	return err
+	return nil
 }
 
 func (a *Agent) setupMembership() error {
@@ -186,12 +185,10 @@ func (a *Agent) setupMembership() error {
 func (a *Agent) Shutdown() error {
 	a.shutdownLock.Lock()
 	defer a.shutdownLock.Unlock()
-
 	if a.shutdown {
 		return nil
 	}
 	a.shutdown = true
-	close(a.shutdowns)
 
 	shutdown := []func() error{
 		a.membership.Leave,
